@@ -4,7 +4,6 @@ async function registerCommands(client, bot, token) {
     try {
         console.log('Started refreshing application (/) commands.');
         
-        // Use bot.commands instead of client.commands
         const commands = [];
         const commandFiles = bot.commands || new Map();
         
@@ -16,26 +15,31 @@ async function registerCommands(client, bot, token) {
         }
 
         const rest = new REST({ version: '10' }).setToken(token);
-        
-        // Get the first guild (server) the bot is in
+
+        // Get all guilds the bot is in
         const guilds = Array.from(client.guilds.cache.values());
         if (guilds.length === 0) {
             console.error('Bot is not in any guilds!');
             return;
         }
 
-        const guildId = guilds[0].id;
-        console.log(`Registering ${commands.length} commands for guild: ${guildId}`);
+        // Register commands for each guild
+        for (const guild of guilds) {
+            try {
+                console.log(`Registering ${commands.length} commands for guild: ${guild.name} (${guild.id})`);
+                await rest.put(
+                    Routes.applicationGuildCommands(client.user.id, guild.id),
+                    { body: commands }
+                );
+                console.log(`Successfully registered commands for guild: ${guild.name}`);
+            } catch (error) {
+                console.error(`Error registering commands for guild ${guild.name}:`, error);
+            }
+        }
 
-        // Register commands for a specific guild (faster than global commands)
-        const data = await rest.put(
-            Routes.applicationGuildCommands(client.user.id, guildId),
-            { body: commands }
-        );
-
-        console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+        console.log('Finished registering commands for all guilds.');
     } catch (error) {
-        console.error('Error registering commands:', error);
+        console.error('Error in command registration:', error);
     }
 }
 
