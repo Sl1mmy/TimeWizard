@@ -28,3 +28,4 @@ A Discord bot that tracks and analyzes the time users spend in voice channels. G
 - Node.js 16.9.0 or higher
 - Discord Bot Token
 - SQLite3
+- replace the token field in `config.json`
