@@ -15,7 +15,8 @@ module.exports = {
                     { name: 'All Time', value: 'all' },
                     { name: 'Daily', value: 'daily' },
                     { name: 'Weekly', value: 'weekly' },
-                    { name: 'Monthly', value: 'monthly' }
+                    { name: 'Monthly', value: 'monthly' },
+                    { name: 'Yearly', value: 'yearly' }
                 ]
             },
             {

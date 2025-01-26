@@ -15,7 +15,8 @@ module.exports = {
                     { name: 'All Time', value: 'all' },
                     { name: 'Daily', value: 'daily' },
                     { name: 'Weekly', value: 'weekly' },
-                    { name: 'Monthly', value: 'monthly' }
+                    { name: 'Monthly', value: 'monthly' },
+                    { name: 'Yearly', value: 'yearly' }
                 ]
             }
         ]
@@ -28,8 +29,30 @@ module.exports = {
         let description = '';
         for (let i = 0; i < leaderboardData.length; i++) {
             const user = leaderboardData[i];
-            const member = interaction.guild.members.cache.get(user.user_id);
-            const username = member ? member.displayName : 'Unknown User';
+            let member = interaction.guild.members.cache.get(user.user_id);
+            
+            // If member not in cache, try to fetch them
+            if (!member) {
+                try {
+                    member = await interaction.guild.members.fetch(user.user_id);
+                } catch (error) {
+                    console.error(`Could not fetch member ${user.user_id}:`, error);
+                }
+            }
+
+            // If still no member, try to fetch user from client
+            let username = 'Unknown User';
+            if (member) {
+                username = member.displayName;
+            } else {
+                try {
+                    const fetchedUser = await bot.client.users.fetch(user.user_id);
+                    username = fetchedUser.username;
+                } catch (error) {
+                    console.error(`Could not fetch user ${user.user_id}:`, error);
+                }
+            }
+
             description += `${i + 1}. **${username}** - ${formatTime(user.total_time)}\n`;
         }
 

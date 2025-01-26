@@ -29,22 +29,45 @@ class VoiceDatabase {
 
     getUserVoiceTime(userId, guildId, period = 'all') {
         let timeFilter = '';
-        const now = Date.now();
         let params = [userId, guildId];
         
         switch(period.toLowerCase()) {
-            case 'daily':
-                timeFilter = 'AND timestamp > ?';
-                params.push(now - (24 * 60 * 60 * 1000)); // 24 hours
+            case 'daily': {
+                // Get timestamp for today at midnight
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(today.getTime());
                 break;
-            case 'weekly':
-                timeFilter = 'AND timestamp > ?';
-                params.push(now - (7 * 24 * 60 * 60 * 1000)); // 7 days
+            }
+            case 'weekly': {
+                // Get timestamp for Monday of current week
+                const today = new Date();
+                const monday = new Date(today);
+                monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+                monday.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(monday.getTime());
                 break;
-            case 'monthly':
-                timeFilter = 'AND timestamp > ?';
-                params.push(now - (30 * 24 * 60 * 60 * 1000)); // 30 days
+            }
+            case 'monthly': {
+                // Get timestamp for 1st of current month
+                const today = new Date();
+                const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                firstOfMonth.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(firstOfMonth.getTime());
                 break;
+            }
+            case 'yearly': {
+                // Get timestamp for January 1st of current year
+                const today = new Date();
+                const firstOfYear = new Date(today.getFullYear(), 0, 1);
+                firstOfYear.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(firstOfYear.getTime());
+                break;
+            }
         }
 
         const stmt = this.db.prepare(`
@@ -61,22 +84,45 @@ class VoiceDatabase {
 
     getLeaderboard(guildId, period = 'all') {
         let timeFilter = '';
-        const now = Date.now();
         let params = [guildId];
         
         switch(period.toLowerCase()) {
-            case 'daily':
-                timeFilter = 'AND timestamp > ?';
-                params.push(now - (24 * 60 * 60 * 1000));
+            case 'daily': {
+                // Get timestamp for today at midnight
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(today.getTime());
                 break;
-            case 'weekly':
-                timeFilter = 'AND timestamp > ?';
-                params.push(now - (7 * 24 * 60 * 60 * 1000));
+            }
+            case 'weekly': {
+                // Get timestamp for Monday of current week
+                const today = new Date();
+                const monday = new Date(today);
+                monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+                monday.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(monday.getTime());
                 break;
-            case 'monthly':
-                timeFilter = 'AND timestamp > ?';
-                params.push(now - (30 * 24 * 60 * 60 * 1000));
+            }
+            case 'monthly': {
+                // Get timestamp for 1st of current month
+                const today = new Date();
+                const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                firstOfMonth.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(firstOfMonth.getTime());
                 break;
+            }
+            case 'yearly': {
+                // Get timestamp for January 1st of current year
+                const today = new Date();
+                const firstOfYear = new Date(today.getFullYear(), 0, 1);
+                firstOfYear.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                params.push(firstOfYear.getTime());
+                break;
+            }
         }
 
         const stmt = this.db.prepare(`
@@ -89,6 +135,98 @@ class VoiceDatabase {
         `);
         
         return stmt.all(...params);
+    }
+
+    getUserAverageTime(userId, guildId, period = 'all') {
+        let timeFilter = '';
+        let params = [userId, guildId];
+        let periodStart;
+        
+        switch(period.toLowerCase()) {
+            case 'daily': {
+                // Get timestamp for the first record or the start of the year, whichever is later
+                const startOfYear = new Date();
+                startOfYear.setMonth(0, 1);
+                startOfYear.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                periodStart = startOfYear.getTime();
+                params.push(periodStart);
+                break;
+            }
+            case 'weekly': {
+                // Get timestamp for the first record or start of the year
+                const startOfYear = new Date();
+                startOfYear.setMonth(0, 1);
+                startOfYear.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                periodStart = startOfYear.getTime();
+                params.push(periodStart);
+                break;
+            }
+            case 'monthly': {
+                // Get timestamp for the first record or start of the year
+                const startOfYear = new Date();
+                startOfYear.setMonth(0, 1);
+                startOfYear.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                periodStart = startOfYear.getTime();
+                params.push(periodStart);
+                break;
+            }
+            case 'yearly': {
+                // Get timestamp for the first record
+                const startOfData = new Date(2020, 0, 1); // Or any reasonable start date
+                startOfData.setHours(0, 0, 0, 0);
+                timeFilter = 'AND timestamp >= ?';
+                periodStart = startOfData.getTime();
+                params.push(periodStart);
+                break;
+            }
+        }
+
+        const stmt = this.db.prepare(`
+            SELECT 
+                COALESCE(SUM(total_time), 0) as total_time,
+                MIN(timestamp) as first_record
+            FROM voice_times 
+            WHERE user_id = ? 
+            AND guild_id = ? 
+            ${timeFilter}
+        `);
+        
+        const result = stmt.get(...params);
+        const totalTime = result.total_time || 0;
+        const firstRecord = result.first_record || Date.now();
+        
+        // Calculate the number of periods (days/weeks/months) since the first record
+        const now = Date.now();
+        let numberOfPeriods = 1; // Default to 1 to avoid division by zero
+        
+        // Move declarations outside switch
+        let firstDate, currentDate;
+        
+        switch(period.toLowerCase()) {
+            case 'daily':
+                numberOfPeriods = Math.max(1, Math.ceil((now - firstRecord) / (24 * 60 * 60 * 1000)));
+                break;
+            case 'weekly':
+                numberOfPeriods = Math.max(1, Math.ceil((now - firstRecord) / (7 * 24 * 60 * 60 * 1000)));
+                break;
+            case 'monthly':
+                firstDate = new Date(firstRecord);
+                currentDate = new Date(now);
+                numberOfPeriods = Math.max(1, 
+                    (currentDate.getFullYear() - firstDate.getFullYear()) * 12 + 
+                    (currentDate.getMonth() - firstDate.getMonth()) + 1);
+                break;
+            case 'yearly':
+                firstDate = new Date(firstRecord);
+                currentDate = new Date(now);
+                numberOfPeriods = Math.max(1, currentDate.getFullYear() - firstDate.getFullYear() + 1);
+                break;
+        }
+        
+        return Math.floor(totalTime / numberOfPeriods);
     }
 }
 
