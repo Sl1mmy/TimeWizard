@@ -252,29 +252,35 @@ class VoiceDatabase {
     }
 
     getActivitySchedule(userId, guildId) {
-        // Get day of week distribution
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        
+        // Get day of week distribution adjusted for CT (UTC-5)
         const dayStmt = this.db.prepare(`
             SELECT 
-                CAST(strftime('%w', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as day_of_week,
+                CAST(strftime('%w', datetime((timestamp/1000) - (5 * 3600), 'unixepoch', 'localtime')) AS INTEGER) as day_of_week,
                 SUM(total_time) as total_time
             FROM voice_times 
-            WHERE user_id = ? AND guild_id = ?
+            WHERE user_id = ? 
+            AND guild_id = ? 
+            AND timestamp >= ?
             GROUP BY day_of_week
             ORDER BY total_time DESC
         `);
-        const dayResults = dayStmt.all(userId, guildId);
+        const dayResults = dayStmt.all(userId, guildId, thirtyDaysAgo);
         
-        // Get hour distribution
+        // Get hour distribution adjusted for CT (UTC-5)
         const hourStmt = this.db.prepare(`
             SELECT 
-                CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+                CAST(strftime('%H', datetime((timestamp/1000) - (5 * 3600), 'unixepoch', 'localtime')) AS INTEGER) as hour,
                 SUM(total_time) as total_time
             FROM voice_times 
-            WHERE user_id = ? AND guild_id = ?
+            WHERE user_id = ? 
+            AND guild_id = ? 
+            AND timestamp >= ?
             GROUP BY hour
-            ORDER BY total_time DESC
+            ORDER BY hour ASC
         `);
-        const hourResults = hourStmt.all(userId, guildId);
+        const hourResults = hourStmt.all(userId, guildId, thirtyDaysAgo);
         
         // Process results
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -282,7 +288,10 @@ class VoiceDatabase {
         const isWeekendActive = dayResults.some(d => (d.day_of_week === 0 || d.day_of_week === 6) && d.total_time > 0);
         
         // Find peak hours (consecutive hours with highest activity)
-        let peakStart = hourResults[0]?.hour || 0;
+        let peakStart = hourResults.reduce((max, curr) => 
+            curr.total_time > (hourResults[max]?.total_time || 0) ? curr.hour : max, 
+            0
+        );
         let peakEnd = (peakStart + 1) % 24;
         
         return {
@@ -313,10 +322,10 @@ class VoiceDatabase {
     getServerActivitySchedule(guildId) {
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
         
-        // Get hourly distribution with unique users
+        // Get hourly distribution adjusted for CT (UTC-5)
         const hourStmt = this.db.prepare(`
             SELECT 
-                CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+                CAST(strftime('%H', datetime((timestamp/1000) - (5 * 3600), 'unixepoch', 'localtime')) AS INTEGER) as hour,
                 SUM(total_time) as total_time,
                 COUNT(DISTINCT user_id) as unique_users
             FROM voice_times 
@@ -327,10 +336,10 @@ class VoiceDatabase {
         `);
         const hourResults = hourStmt.all(guildId, thirtyDaysAgo);
 
-        // Get daily distribution with unique users
+        // Get daily distribution adjusted for CT (UTC-5)
         const dayStmt = this.db.prepare(`
             SELECT 
-                CAST(strftime('%w', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as day_of_week,
+                CAST(strftime('%w', datetime((timestamp/1000) - (5 * 3600), 'unixepoch', 'localtime')) AS INTEGER) as day_of_week,
                 SUM(total_time) as total_time,
                 COUNT(DISTINCT user_id) as unique_users
             FROM voice_times 
@@ -358,7 +367,7 @@ class VoiceDatabase {
             FROM voice_times 
             WHERE guild_id = ? 
             AND timestamp >= ?
-            GROUP BY DATE(datetime(timestamp/1000, 'unixepoch', 'localtime'))
+            GROUP BY DATE(datetime((timestamp/1000) - (5 * 3600), 'unixepoch', 'localtime'))
         `);
         const dailyUsers = avgDailyStmt.all(guildId, thirtyDaysAgo);
         const avgDailyUsers = Math.round(dailyUsers.reduce((sum, day) => sum + day.users, 0) / dailyUsers.length) || 0;
@@ -383,7 +392,7 @@ class VoiceDatabase {
             totalTime: stats.total_time || 0,
             avgDailyUsers,
             peakHours: `${formatHour(peakHour.hour)} CT`,
-            mostActive: days[mostActiveDay.day_of_week],
+            mostActive: days[mostActiveDay.day_of_week] || 'Unknown',
         };
     }
 }
