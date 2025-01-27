@@ -32,34 +32,36 @@ class VoiceDatabase {
         let timeFilter = '';
         let params = [userId, guildId];
         
-        // Helper function to get UTC-5 timestamp
-        const getCentralTime = (date) => {
-            // Create date in UTC
-            const utcDate = new Date(date);
-            // Adjust to UTC-5
-            utcDate.setHours(utcDate.getHours() + 5);
-            return utcDate;
-        };
-        
         switch(period.toLowerCase()) {
             case 'daily': {
-                // Get timestamp for today at Central midnight
-                const today = new Date();
-                const centralMidnight = getCentralTime(today);
-                centralMidnight.setHours(0, 0, 0, 0);
+                // Get current date in UTC
+                const now = new Date();
+                
+                // Calculate today's midnight in CT (UTC-5)
+                const midnightCT = new Date(now);
+                midnightCT.setHours(5, 0, 0, 0); // 5 AM UTC = Midnight CT
+                
+                // If current UTC time is before 5 AM, we need previous day's 5 AM
+                if (now.getUTCHours() < 5) {
+                    midnightCT.setDate(midnightCT.getDate() - 1);
+                }
+                
                 timeFilter = 'AND timestamp >= ?';
-                params.push(centralMidnight.getTime());
+                params.push(midnightCT.getTime());
                 break;
             }
             case 'weekly': {
-                // Get timestamp for Monday of current week in Central Time
                 const today = new Date();
                 const centralToday = getCentralTime(today);
-                const monday = new Date(centralToday);
-                monday.setDate(centralToday.getDate() - centralToday.getDay() + (centralToday.getDay() === 0 ? -6 : 1));
-                monday.setHours(0, 0, 0, 0);
+                centralToday.setHours(0, 0, 0, 0);
+                // Set to last Sunday
+                centralToday.setDate(centralToday.getDate() - centralToday.getDay());
+                
+                // Convert back to UTC for database comparison
+                const centralWeekStartUTC = new Date(centralToday.getTime() + (5 * 60 * 60 * 1000));
+                
                 timeFilter = 'AND timestamp >= ?';
-                params.push(monday.getTime());
+                params.push(centralWeekStartUTC.getTime());
                 break;
             }
             case 'monthly': {
@@ -84,16 +86,16 @@ class VoiceDatabase {
             }
         }
 
-        const stmt = this.db.prepare(`
+        const query = `
             SELECT COALESCE(SUM(total_time), 0) as total_time 
             FROM voice_times 
             WHERE user_id = ? 
             AND guild_id = ? 
             ${timeFilter}
-        `);
+        `;
         
-        const result = stmt.get(...params);
-        return result.total_time || 0;
+        const result = this.db.prepare(query).get(...params);
+        return result.total_time;
     }
 
     getLeaderboard(guildId, period = 'all') {
