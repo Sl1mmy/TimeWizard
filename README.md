@@ -5,23 +5,40 @@ A Discord bot that tracks and analyzes the time users spend in voice channels. G
 ## Features
 
 - 🕒 Real-time voice activity tracking
-- 📈 Multiple time period views (daily, weekly, monthly, all-time)
+- 📈 Multiple time period views (daily, weekly, monthly, yearly, all-time)
 - 🤝 User comparison functionality
 - 💾 Persistent data storage using SQLite
 - ⚡ Slash command support
 
 ## Commands
 
-- `/timespent [period] [user]` - Check time spent in voice channels
-  - View your own or another user's voice time
-  - Optional periods: daily, weekly, monthly, all-time
+### Time Tracking
+* `/timespent [period] [user]` - Shows time spent in voice channels
+  * `period` - daily/weekly/monthly/yearly/all (default: all)
+  * `user` - @user mention (default: yourself)
+ 
+* `/compare <user1> <user2>` - Compare voice time between two users
+  * `user1` - first @user mention
+  * `user2` - second @user mention
 
-- `/leaderboard [period]` - Display server-wide voice time rankings
-  - View top users by voice activity
-  - Optional periods: daily, weekly, monthly, all-time
+* `/leaderboard [period] [page]` - Shows server leaderboard
+  * `period` - daily/weekly/monthly/yearly/all (default: all)
+  * `page` - Page number (default: 1)
 
-- `/compare <user1> <user2>` - Compare voice time between two users
-  - Shows detailed comparison with time differences
+### Activity Analysis
+* `/average [user]` - Shows average daily voice time
+  * `user` - @user mention (default: yourself)
+  * Displays average time spent in voice per day
+
+* `/stats [user]` - Shows detailed voice activity patterns
+  * `user` - @user mention (default: yourself)
+  * Displays hourly and daily activity graphs
+  * Shows peak activity times and patterns
+
+* `/serverstats` - Shows server-wide voice activity statistics
+  * Displays server-wide activity patterns
+  * Shows total users and average daily users
+  * Includes hourly and daily activity graphs with user counts
 
 ## Prerequisites
 
