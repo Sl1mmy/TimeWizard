@@ -1,4 +1,5 @@
 const Database = require('better-sqlite3');
+const { formatHour, getPeriodOfDay } = require('../utils/timeFormatter');
 
 class VoiceDatabase {
     constructor() {
@@ -31,38 +32,51 @@ class VoiceDatabase {
         let timeFilter = '';
         let params = [userId, guildId];
         
+        // Helper function to get UTC-5 timestamp
+        const getCentralTime = (date) => {
+            // Create date in UTC
+            const utcDate = new Date(date);
+            // Adjust to UTC-5
+            utcDate.setHours(utcDate.getHours() + 5);
+            return utcDate;
+        };
+        
         switch(period.toLowerCase()) {
             case 'daily': {
-                // Get timestamp for today at midnight
+                // Get timestamp for today at Central midnight
                 const today = new Date();
-                today.setHours(0, 0, 0, 0);
+                const centralMidnight = getCentralTime(today);
+                centralMidnight.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
-                params.push(today.getTime());
+                params.push(centralMidnight.getTime());
                 break;
             }
             case 'weekly': {
-                // Get timestamp for Monday of current week
+                // Get timestamp for Monday of current week in Central Time
                 const today = new Date();
-                const monday = new Date(today);
-                monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+                const centralToday = getCentralTime(today);
+                const monday = new Date(centralToday);
+                monday.setDate(centralToday.getDate() - centralToday.getDay() + (centralToday.getDay() === 0 ? -6 : 1));
                 monday.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
                 params.push(monday.getTime());
                 break;
             }
             case 'monthly': {
-                // Get timestamp for 1st of current month
+                // Get timestamp for 1st of current month in Central Time
                 const today = new Date();
-                const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                const centralToday = getCentralTime(today);
+                const firstOfMonth = new Date(centralToday.getFullYear(), centralToday.getMonth(), 1);
                 firstOfMonth.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
                 params.push(firstOfMonth.getTime());
                 break;
             }
             case 'yearly': {
-                // Get timestamp for January 1st of current year
+                // Get timestamp for January 1st of current year in Central Time
                 const today = new Date();
-                const firstOfYear = new Date(today.getFullYear(), 0, 1);
+                const centralToday = getCentralTime(today);
+                const firstOfYear = new Date(centralToday.getFullYear(), 0, 1);
                 firstOfYear.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
                 params.push(firstOfYear.getTime());
@@ -86,38 +100,45 @@ class VoiceDatabase {
         let timeFilter = '';
         let params = [guildId];
         
+        // Helper function to get UTC-5 timestamp
+        const getCentralTime = (date) => {
+            const utcDate = new Date(date);
+            utcDate.setHours(utcDate.getHours() + 5);
+            return utcDate;
+        };
+        
         switch(period.toLowerCase()) {
             case 'daily': {
-                // Get timestamp for today at midnight
                 const today = new Date();
-                today.setHours(0, 0, 0, 0);
+                const centralMidnight = getCentralTime(today);
+                centralMidnight.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
-                params.push(today.getTime());
+                params.push(centralMidnight.getTime());
                 break;
             }
             case 'weekly': {
-                // Get timestamp for Monday of current week
                 const today = new Date();
-                const monday = new Date(today);
-                monday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+                const centralToday = getCentralTime(today);
+                const monday = new Date(centralToday);
+                monday.setDate(centralToday.getDate() - centralToday.getDay() + (centralToday.getDay() === 0 ? -6 : 1));
                 monday.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
                 params.push(monday.getTime());
                 break;
             }
             case 'monthly': {
-                // Get timestamp for 1st of current month
                 const today = new Date();
-                const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                const centralToday = getCentralTime(today);
+                const firstOfMonth = new Date(centralToday.getFullYear(), centralToday.getMonth(), 1);
                 firstOfMonth.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
                 params.push(firstOfMonth.getTime());
                 break;
             }
             case 'yearly': {
-                // Get timestamp for January 1st of current year
                 const today = new Date();
-                const firstOfYear = new Date(today.getFullYear(), 0, 1);
+                const centralToday = getCentralTime(today);
+                const firstOfYear = new Date(centralToday.getFullYear(), 0, 1);
                 firstOfYear.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
                 params.push(firstOfYear.getTime());
@@ -179,7 +200,6 @@ class VoiceDatabase {
                 startOfData.setHours(0, 0, 0, 0);
                 timeFilter = 'AND timestamp >= ?';
                 periodStart = startOfData.getTime();
-                params.push(periodStart);
                 break;
             }
         }
@@ -227,6 +247,142 @@ class VoiceDatabase {
         }
         
         return Math.floor(totalTime / numberOfPeriods);
+    }
+
+    getActivitySchedule(userId, guildId) {
+        // Get day of week distribution
+        const dayStmt = this.db.prepare(`
+            SELECT 
+                CAST(strftime('%w', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as day_of_week,
+                SUM(total_time) as total_time
+            FROM voice_times 
+            WHERE user_id = ? AND guild_id = ?
+            GROUP BY day_of_week
+            ORDER BY total_time DESC
+        `);
+        const dayResults = dayStmt.all(userId, guildId);
+        
+        // Get hour distribution
+        const hourStmt = this.db.prepare(`
+            SELECT 
+                CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+                SUM(total_time) as total_time
+            FROM voice_times 
+            WHERE user_id = ? AND guild_id = ?
+            GROUP BY hour
+            ORDER BY total_time DESC
+        `);
+        const hourResults = hourStmt.all(userId, guildId);
+        
+        // Process results
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const mostActiveDay = days[dayResults[0]?.day_of_week || 0];
+        const isWeekendActive = dayResults.some(d => (d.day_of_week === 0 || d.day_of_week === 6) && d.total_time > 0);
+        
+        // Find peak hours (consecutive hours with highest activity)
+        let peakStart = hourResults[0]?.hour || 0;
+        let peakEnd = (peakStart + 1) % 24;
+        
+        return {
+            mostActive: isWeekendActive ? "Weekends" : "Weekdays",
+            peakHours: `${formatHour(peakStart)}-${formatHour(peakEnd)} CT`,
+            leastActive: getPeriodOfDay(hourResults.slice(-3).map(h => h.hour)),
+            hourlyData: hourResults,
+            dailyData: dayResults
+        };
+    }
+
+    getOptimalTime(guildId) {
+        // Get overall server activity patterns
+        const stmt = this.db.prepare(`
+            SELECT 
+                CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+                COUNT(DISTINCT user_id) as unique_users,
+                SUM(total_time) as total_time
+            FROM voice_times 
+            WHERE guild_id = ?
+            GROUP BY hour
+            ORDER BY unique_users DESC, total_time DESC
+        `);
+        
+        return stmt.all(guildId);
+    }
+
+    getServerActivitySchedule(guildId) {
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        
+        // Get hourly distribution with unique users
+        const hourStmt = this.db.prepare(`
+            SELECT 
+                CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+                SUM(total_time) as total_time,
+                COUNT(DISTINCT user_id) as unique_users
+            FROM voice_times 
+            WHERE guild_id = ? 
+            AND timestamp >= ?
+            GROUP BY hour
+            ORDER BY hour ASC
+        `);
+        const hourResults = hourStmt.all(guildId, thirtyDaysAgo);
+
+        // Get daily distribution with unique users
+        const dayStmt = this.db.prepare(`
+            SELECT 
+                CAST(strftime('%w', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER) as day_of_week,
+                SUM(total_time) as total_time,
+                COUNT(DISTINCT user_id) as unique_users
+            FROM voice_times 
+            WHERE guild_id = ? 
+            AND timestamp >= ?
+            GROUP BY day_of_week
+            ORDER BY day_of_week ASC
+        `);
+        const dayResults = dayStmt.all(guildId, thirtyDaysAgo);
+
+        // Get overall statistics
+        const statsStmt = this.db.prepare(`
+            SELECT 
+                COUNT(DISTINCT user_id) as total_users,
+                SUM(total_time) as total_time
+            FROM voice_times 
+            WHERE guild_id = ? 
+            AND timestamp >= ?
+        `);
+        const stats = statsStmt.get(guildId, thirtyDaysAgo);
+
+        // Calculate average daily users
+        const avgDailyStmt = this.db.prepare(`
+            SELECT COUNT(DISTINCT user_id) as users
+            FROM voice_times 
+            WHERE guild_id = ? 
+            AND timestamp >= ?
+            GROUP BY DATE(datetime(timestamp/1000, 'unixepoch', 'localtime'))
+        `);
+        const dailyUsers = avgDailyStmt.all(guildId, thirtyDaysAgo);
+        const avgDailyUsers = Math.round(dailyUsers.reduce((sum, day) => sum + day.users, 0) / dailyUsers.length) || 0;
+
+        // Find peak hours
+        const peakHour = hourResults.reduce((max, curr) => 
+            curr.total_time > max.total_time ? curr : max, 
+            { total_time: 0 }
+        );
+
+        // Find most active day
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const mostActiveDay = dayResults.reduce((max, curr) => 
+            curr.total_time > max.total_time ? curr : max, 
+            { total_time: 0 }
+        );
+
+        return {
+            hourlyData: hourResults,
+            dailyData: dayResults,
+            totalUsers: stats.total_users || 0,
+            totalTime: stats.total_time || 0,
+            avgDailyUsers,
+            peakHours: `${formatHour(peakHour.hour)} CT`,
+            mostActive: days[mostActiveDay.day_of_week],
+        };
     }
 }
 
